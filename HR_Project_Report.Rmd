@@ -1,11 +1,19 @@
-#######################################################################
-# HR  Project 
-# 26 Dic 2020
-# Gabrielmaria Scozzarro
-#    
-#######################################################################
+---
+title: "HR data analysis and contract termination prediction"
+author: "Gabriel Scozzarro"
+Date: "26/12/2020"
+output: pdf_document
+mainfont: Arial
+---
 
-# 0.1 Tools ----
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## 1.0 Introduction
+
+
+````{r lib, warning = FALSE, error = FALSE, message = FALSE, echo = FALSE}
 library(tidyverse)
 library(corrplot)
 library(kableExtra)
@@ -13,19 +21,21 @@ library(scales)
 library(lubridate)
 library(reshape2)
 library(plyr)
+````
 
+## 2.0 Preparation and reading data
+Data was imported from the set contained inside the file HRDataset_v14.csv
 
-
-
-# 1.0 Import data ----
+````{r import data, echo = FALSE}
 hr_data<- read.csv("Data/HRDataset_v14.csv")
+````
 
-
-# 1.1 Data summary ----
+````{r summary, echo = FALSE}
 glimpse(hr_data)
 summary(hr_data)
+````
 
-# 1.2 Fix data ---- 
+````{r fixing, echo = FALSE}
 hr_data$ManagerID[is.na(hr_data$ManagerID)]<- 0
 
 hr_data$MaritalDesc<- as_factor(hr_data$MaritalDesc)
@@ -43,9 +53,10 @@ hr_data$DOB<- as.Date(hr_data$DOB, "%m/%d/%y")
 hr_data$DOB<- as.Date(ifelse(hr_data$DOB > "2020-01-01", format(hr_data$DOB, "19%y-%m-%d"), format(hr_data$DOB)))
 
 hr_data$Age<- year(Sys.Date())-year(hr_data$DOB)
-# 2.0 EDA ----
+````
+## EDA
 
-# Gender analysis
+````{r gender analysis, echo = FALSE }
 hr_data %>% ggplot(aes(Sex, fill = Sex)) +
             geom_bar(stat = "count") +
             ggtitle("Gender presence") +
@@ -150,3 +161,5 @@ hr_data %>% group_by(Sex, Salary_level) %>%
             ggplot(aes(Salary_level, EmpSatisfaction, fill = Sex)) +
             geom_boxplot() +
             ggtitle("Employes satisfaction level by gender and salary level")
+
+````
