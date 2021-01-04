@@ -30,9 +30,24 @@ Data was imported from the set contained inside the file HRDataset_v14.csv
 hr_data<- read.csv("Data/HRDataset_v14.csv")
 ````
 
+
 ````{r summary, echo = FALSE}
-glimpse(hr_data)
-summary(hr_data)
+feature_desc<- c('Employee’s full name', 'Employee ID is unique to each employee', 'Is the person married (1 or 0 for yes or no)',
+                 'Marital status code that matches the text field MaritalDesc','Gender ID that mathces Sex', 'Employment status code that matches text field EmploymentStatus', 'Department ID code that matches the department the employee works in', 'Performance Score code that matches the employee’s most recent performance score', 'Was the employee sourced from the Diversity job fair? 1 or 0 for yes or no','The person’s annual pay rate', 'Has this employee been terminated - 1 or 0', 'An integer indicating the person’s position','The text name/title of the position the person has','The state that the person lives in','The zip code for the employee', 'Date of Birth for the employee','Sex - M or F', 'The marital status of the person (divorced, single, widowed, separated, etc)', 'Label for whether the person is a Citizen or Eligible NonCitizen', 'Yes or No field for whether the employee is Hispanic/Latino', 'Description/text of the race the person identifies with', 'Date the person was hired', 'Date the person was terminated, only populated if, in fact, Termd = 1', 'A text reason / description for why the person was terminated'	, 'A description/category of the person’s employment status. Anyone currently working full time = Active', 'Name of the department that the person works in', 'The name of the person’s immediate manager', 'A unique identifier for each manager', 'The name of the recruitment source where the employee was recruited from','Performance Score text/category (Fully Meets, Partially Meets, PIP, Exceeds)','Results from the last engagement survey, managed by our external partner', 'A basic satisfaction score between 1 and 5, as reported on a recent employee satisfaction survey', 'The number of special projects that the employee worked on during the last 6 months','The most recent date of the person’s last performance review', 'The number of times that the employee was late to work during the last 30 days', 'The number of times the employee was absent from work')
+
+feature_type<- c('Text','Text','Binary','Integer','Binary','Integer','Integer','Integer','Binary','Float','Binary','Integer','Text','Text','Text','Date','Text','Text','Text','Text','Text','Date','Date','Text','Text','Text','Text',
+'Integer','Text','Text','Float','Integer','Integer','Date','Integer','Integer')
+
+glimpse_data<- data.frame(Feature = colnames(hr_data), Description = feature_desc, Type = feature_type)
+
+glimpse_data %>% kable('latex', digits = 10, booktabs = T) %>% kable_styling(full_width = FALSE, font_size = 11, latex_options = c("striped", 'condensed','scale_down')) %>% column_spec(3, width = "12em")
+
+summary_data<- summary(hr_data)
+
+summary_data[,1:9] %>% kable('latex', digits = 10, booktabs = T) %>% kable_styling(full_width = FALSE, font_size = 11, latex_options = c("striped", 'condensed','scale_down'))
+summary_data[,10:18] %>% kable('latex', digits = 10, booktabs = T) %>% kable_styling(full_width = FALSE, font_size = 11, latex_options = c("striped", 'condensed','scale_down'))
+summary_data[,19:27] %>% kable('latex', digits = 10, booktabs = T) %>% kable_styling(full_width = FALSE, font_size = 11, latex_options = c("striped", 'condensed','scale_down'))
+summary_data[,28:36] %>% kable('latex', digits = 10, booktabs = T) %>% kable_styling(full_width = FALSE, font_size = 11, latex_options = c("striped", 'condensed','scale_down'))
 ````
 
 ````{r fixing, echo = FALSE}
@@ -54,9 +69,10 @@ hr_data$DOB<- as.Date(ifelse(hr_data$DOB > "2020-01-01", format(hr_data$DOB, "19
 
 hr_data$Age<- year(Sys.Date())-year(hr_data$DOB)
 ````
-## EDA
+The total amount of employees are 311 and 36 features was collected for each of them.
 
-````{r gender analysis, echo = FALSE }
+## EDA
+````{r gender analysis I, echo = FALSE, warning = FALSE, error = FALSE, message = FALSE }
 hr_data %>% ggplot(aes(Sex, fill = Sex)) +
             geom_bar(stat = "count") +
             ggtitle("Gender presence") +
@@ -82,8 +98,14 @@ hr_data %>% filter(!is.na(DateofTermination)) %>%
             theme(text = element_text(size = 16)) +
             ggtitle("Gender presence by role up to date") +
             theme_minimal()
+````
+The company has a majority presence of women (176) compare to men (135) with a very close average age of respectively 42.5 for women and  42.3 for men. Regardless the average age we can see that the age distribution is shift to the left for both men and women meaning that the the majority of the employees are younger compare to the average age.
 
-hr_data %>% ggplot(aes(x = factor(order), fill = Sex)) + 
+The company has a large an prevalent presence of women employed in the production as Product Technician I and Product Technician II. Managerial roles also has a 100% prevalence of women guiding fundamental aspects such as software engineering, sales and production. 
+````{r gender analysis II, echo = FALSE, out.height= '100%', warning = FALSE, error = FALSE, message = FALSE }
+
+hr_data %>% filter(year(DateofHire)<= 2009) %>%
+            ggplot(aes(x = factor(order), fill = Sex)) + 
             geom_bar(subset=.(Sex == "M")) + 
             geom_bar(subset=.(Sex == "F"), aes(y=..count..)) + 
             scale_x_discrete(labels = all_roles) +
@@ -91,8 +113,48 @@ hr_data %>% ggplot(aes(x = factor(order), fill = Sex)) +
             coord_flip() +
             theme(text = element_text(size = 16)) +
             facet_wrap(~year(DateofHire)) +
-            ggtitle("Enrolment by role and gender since the incorporation") +
+            ggtitle("Enrolment by role and gender 2006 - 2009") +
             theme_minimal()
+            
+hr_data %>% filter(year(DateofHire)>= 2010  & year(DateofHire)<= 2013) %>%
+            ggplot(aes(x = factor(order), fill = Sex)) + 
+            geom_bar(subset=.(Sex == "M")) + 
+            geom_bar(subset=.(Sex == "F"), aes(y=..count..)) + 
+            scale_x_discrete(labels = all_roles) +
+            xlab("Role") +
+            coord_flip() +
+            theme(text = element_text(size = 16)) +
+            facet_wrap(~year(DateofHire)) +
+            ggtitle("Enrolment by role and gender 2010 - 2013") +
+            theme_minimal()
+
+hr_data %>% filter(year(DateofHire)>= 2014  & year(DateofHire)<= 2016) %>%
+            ggplot(aes(x = factor(order), fill = Sex)) + 
+            geom_bar(subset=.(Sex == "M")) + 
+            geom_bar(subset=.(Sex == "F"), aes(y=..count..)) + 
+            scale_x_discrete(labels = all_roles) +
+            xlab("Role") +
+            coord_flip() +
+            theme(text = element_text(size = 16)) +
+            facet_wrap(~year(DateofHire)) +
+            ggtitle("Enrolment by role and gender 2014 - 2016") +
+            theme_minimal()
+
+hr_data %>% filter(year(DateofHire)> 2016) %>%
+            ggplot(aes(x = factor(order), fill = Sex)) + 
+            geom_bar(subset=.(Sex == "M")) + 
+            geom_bar(subset=.(Sex == "F"), aes(y=..count..)) + 
+            scale_x_discrete(labels = all_roles) +
+            xlab("Role") +
+            coord_flip() +
+            theme(text = element_text(size = 16)) +
+            facet_wrap(~year(DateofHire)) +
+            ggtitle("Enrolment by role and gender 2017 - 2018") +
+            theme_minimal()
+````
+ 
+````{r gender analysis III, echo = FALSE, warning = FALSE, error = FALSE, message = FALSE }
+
 
 hr_data %>% group_by(Sex, year = year(DateofHire)) %>%
             dplyr::summarise(n = n()) %>%
