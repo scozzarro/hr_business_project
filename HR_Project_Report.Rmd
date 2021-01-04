@@ -151,9 +151,6 @@ hr_data %>% filter(year(DateofHire)> 2016) %>%
             facet_wrap(~year(DateofHire)) +
             ggtitle("Enrolment by role and gender 2017 - 2018") +
             theme_minimal()
-````
- 
-````{r gender analysis III, echo = FALSE, warning = FALSE, error = FALSE, message = FALSE }
 
 
 hr_data %>% group_by(Sex, year = year(DateofHire)) %>%
@@ -163,7 +160,9 @@ hr_data %>% group_by(Sex, year = year(DateofHire)) %>%
             geom_point(size = 2) +
             ggtitle("Hiring trend by gender") +
             theme_minimal()
+````
 
+````{r gender analysis III, echo = FALSE, warning = FALSE, error = FALSE, message = FALSE }
 
 hr_data %>% group_by(Sex, Position) %>%
             dplyr::summarise(avgsal = mean(Salary)) %>%
