@@ -13,8 +13,10 @@ library(scales)
 library(lubridate)
 library(reshape2)
 library(plyr)
+library(RColorBrewer)
 
-
+nb.cols <- 26
+mycolors <- colorRampPalette(brewer.pal(8, "Set2"))(nb.cols)
 
 
 # 1.0 Import data ----
@@ -150,3 +152,102 @@ hr_data %>% group_by(Sex, Salary_level) %>%
             ggplot(aes(Salary_level, EmpSatisfaction, fill = Sex)) +
             geom_boxplot() +
             ggtitle("Employes satisfaction level by gender and salary level")
+
+#Manager and performance analysis ----
+kable(unique(hr_data$ManagerName), format = 'html', booktabs = T) %>% kable_styling(bootstrap_options = 'striped')
+length(unique(hr_data$ManagerName))
+
+hr_data %>% ggplot(aes(ManagerName, fill = ManagerName)) +
+            geom_bar() +
+            geom_text(stat='count', aes(label=..count..), vjust=0, nudge_y = 0.5) +
+            scale_fill_manual(values = mycolors) +
+            coord_flip() +
+            ggtitle('Employees under each manager') +
+            theme_minimal() +
+            theme(legend.position = 'none')
+
+hr_data %>% ggplot(aes(PerformanceScore, fill = PerformanceScore)) +
+            geom_bar() +
+            geom_text(stat='count', aes(label=..count..), vjust=-0.2) +
+            facet_wrap(~ManagerName) +
+            theme(axis.text.x=element_blank()) +
+            ggtitle('Employess performance by manager')
+
+hr_data %>% filter(EmploymentStatus != 'Active') %>%
+            ggplot(aes(TermReason, fill = TermReason)) +
+            geom_bar() +
+            geom_text(stat='count', aes(label=..count..), vjust=0, nudge_y = 0.5) +
+            facet_wrap(~ManagerName) +
+            scale_fill_manual(values = mycolors) +
+            theme(axis.text.x=element_blank()) +
+            ggtitle('Termination reason by manager')
+
+hr_data %>% group_by(ManagerName) %>%
+            dplyr::summarise(Special_Projects = sum(SpecialProjectsCount)) %>%
+            ggplot(aes(Special_Projects, ManagerName, fill = ManagerName)) +
+            geom_bar(stat = 'identity') +
+            geom_text(aes(label=Special_Projects, vjust=0.5)) +
+            scale_fill_manual(values = mycolors) +
+            ggtitle('Special projects by manager') +
+            theme_minimal() +
+            theme(legend.position = 'none')
+
+hr_data %>% group_by(ManagerName) %>%
+            dplyr::summarise(avgsatisf = mean(EmpSatisfaction)) %>%
+            ggplot(aes(sort(avgsatisf, decreasing = F), ManagerName, fill = ManagerName)) +
+            geom_bar(stat = 'identity') +
+            scale_fill_manual(values = mycolors) +
+            ggtitle('Average employees satisfaction by manager') +
+            theme_minimal() +
+            theme(legend.position = 'none')
+
+
+#Termination for salary analysis ----
+hr_data %>% filter(TermReason == 'more money') %>% 
+            group_by(Position) %>% 
+            dplyr::summarise(n = n()) %>%
+            ggplot(aes(n, Position, fill = Position)) +
+            geom_bar(stat = 'identity') +
+            scale_fill_manual(values = mycolors) +
+            ggtitle('Postion and quantity terminated for more money') +
+            theme_minimal()
+
+hr_data %>% filter(TermReason == 'more money') %>%
+            group_by(Position) %>% 
+            dplyr::summarise(avgsatisfaction = mean(EmpSatisfaction)) %>%
+            ggplot(aes(avgsatisfaction, Position, fill = Position)) +
+            geom_bar(stat = 'identity') +
+            scale_fill_manual(values = mycolors) +
+            ggtitle('Employees satisfaction which terminated') +
+            theme_minimal()
+
+termpos<- unique(as.character(hr_data$Position[which(hr_data$TermReason == 'more money')]))
+
+avgsal_active<- hr_data %>% group_by(Position) %>%
+                filter(EmploymentStatus == 'Active') %>%
+                dplyr::summarise(avgsal = mean(Salary)) %>%
+                filter(Position %in% termpos)
+
+avgsal_terminated<- hr_data %>% group_by(Position) %>%
+                    filter(EmploymentStatus != 'Active') %>%
+                    dplyr::summarise(avgsal = mean(Salary)) %>%
+                    filter(Position %in% termpos)
+
+avgsal_active$status<- c('Active','Active')
+avgsal_terminated$status<- c('Terminated','Terminated')
+
+avsal_frame<- full_join(x = avgsal_active, y = avgsal_terminated)
+
+avsal_frame %>% ggplot(aes(avgsal, Position, fill = status)) +
+                geom_bar(stat = 'identity', position = 'dodge') +
+                scale_fill_manual(values = mycolors) +
+                ggtitle('Salary difference between active employees and whom terminted for more money') +
+                theme_minimal()
+
+hr_data %>% group_by(RecruitmentSource) %>%
+            dplyr::summarise(avgsal = mean(Salary)) %>%
+            ggplot(aes(sort(avgsal, decreasing = F), RecruitmentSource, fill = RecruitmentSource)) +
+            geom_bar(stat = 'identity') +
+            scale_fill_manual(values = mycolors) +
+            ggtitle('Salary by recruitment source') +
+            theme_minimal()
