@@ -218,7 +218,7 @@ hr_data %>% filter(TermReason == 'more money') %>%
             ggplot(aes(avgsatisfaction, Position, fill = Position)) +
             geom_bar(stat = 'identity') +
             scale_fill_manual(values = mycolors) +
-            ggtitle('Employees satisfaction which terminated') +
+            ggtitle('Satiosfaction lev of who terminated for more money') +
             theme_minimal()
 
 termpos<- unique(as.character(hr_data$Position[which(hr_data$TermReason == 'more money')]))
@@ -241,7 +241,7 @@ avsal_frame<- full_join(x = avgsal_active, y = avgsal_terminated)
 avsal_frame %>% ggplot(aes(avgsal, Position, fill = status)) +
                 geom_bar(stat = 'identity', position = 'dodge') +
                 scale_fill_manual(values = mycolors) +
-                ggtitle('Salary difference between active employees and whom terminted for more money') +
+                ggtitle('Salary difference between employees and whom terminted for more money') +
                 theme_minimal()
 
 hr_data %>% group_by(RecruitmentSource) %>%
@@ -249,5 +249,5 @@ hr_data %>% group_by(RecruitmentSource) %>%
             ggplot(aes(sort(avgsal, decreasing = F), RecruitmentSource, fill = RecruitmentSource)) +
             geom_bar(stat = 'identity') +
             scale_fill_manual(values = mycolors) +
-            ggtitle('Salary by recruitment source') +
+            ggtitle('Average salary by recruitment source') +
             theme_minimal()
