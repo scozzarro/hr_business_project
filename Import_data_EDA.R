@@ -14,6 +14,11 @@ library(lubridate)
 library(reshape2)
 library(plyr)
 library(RColorBrewer)
+library(corrplot)
+library(caret)
+library(igraph)
+library(ggraph)
+
 
 nb.cols <- 26
 mycolors <- colorRampPalette(brewer.pal(8, "Set2"))(nb.cols)
@@ -47,7 +52,7 @@ hr_data$DOB<- as.Date(ifelse(hr_data$DOB > "2020-01-01", format(hr_data$DOB, "19
 hr_data$Age<- year(Sys.Date())-year(hr_data$DOB)
 # 2.0 EDA ----
 
-# Gender analysis
+# 2.1 Gender analysis
 hr_data %>% ggplot(aes(Sex, fill = Sex)) +
             geom_bar(stat = "count") +
             ggtitle("Gender presence") +
@@ -153,7 +158,7 @@ hr_data %>% group_by(Sex, Salary_level) %>%
             geom_boxplot() +
             ggtitle("Employes satisfaction level by gender and salary level")
 
-#Manager and performance analysis ----
+# 2.2 Manager and performance analysis ----
 kable(unique(hr_data$ManagerName), format = 'html', booktabs = T) %>% kable_styling(bootstrap_options = 'striped')
 length(unique(hr_data$ManagerName))
 
@@ -202,7 +207,7 @@ hr_data %>% group_by(ManagerName) %>%
             theme(legend.position = 'none')
 
 
-#Termination for salary analysis ----
+# 2.3 Termination for salary analysis ----
 hr_data %>% filter(TermReason == 'more money') %>% 
             group_by(Position) %>% 
             dplyr::summarise(n = n()) %>%
@@ -251,3 +256,149 @@ hr_data %>% group_by(RecruitmentSource) %>%
             scale_fill_manual(values = mycolors) +
             ggtitle('Average salary by recruitment source') +
             theme_minimal()
+
+# 2.4 Correlation ----
+
+hr_data_numeric<- hr_data%>% dplyr::select(where(is.numeric))
+useless_col_numeric<- c("EmpID", "Zip", 'order')
+hr_data_numeric<- hr_data_numeric[, -which(colnames(hr_data_numeric) %in% useless_col_numeric)]
+
+corrplot(cor(hr_data_numeric), method = 'circle')
+
+hr_data %>% ggplot(aes(Salary, PerfScoreID, fill = EngagementSurvey)) +
+            geom_point()
+
+with(hr_data, qplot(Salary, PerfScoreID, colour = EngagementSurvey, cex=2))
+
+
+ # 3.0 Performance Prediction ----
+
+hr_data$PerfScoreID<- as.factor(hr_data$PerfScoreID)
+
+val_index<- createDataPartition(hr_data$PerfScoreID, p = 0.2, list = FALSE)
+
+validation<- hr_data[val_index,]
+train<- hr_data[-val_index,]
+
+hr.tree = train(PerfScoreID ~ EngagementSurvey +
+                              EmpSatisfaction +
+                              Age +
+                              Salary +
+                              Absences +
+                              ManagerID, 
+                              data=train, 
+                              method="rpart", 
+                              trControl = trainControl(method = "cv"))
+hr.tree
+
+suppressMessages(library(rattle))
+
+fancyRpartPlot(hr.tree$finalModel)
+
+varImp(hr.tree)
+
+hr.pred = predict(hr.tree, newdata = validation)
+
+table(hr.pred, validation$PerfScoreID)
+
+error.rate = round(mean(hr.pred != validation$PerfScoreID),2)
+
+error.rate
+
+
+#second tree model
+
+
+hr.tree_2 = train(PerfScoreID ~ EngagementSurvey +
+                  EmpSatisfaction +
+                  Age +
+                  Salary +
+                  Absences +
+                  ManagerID +
+                  Absences, 
+                  data=train, 
+                  method="rf",
+                  metric = 'Accuracy',
+                  trControl = trainControl(method = "cv", number=10, repeats=3, search = 'random'))
+
+hr.tree_2
+
+plot(hr.tree_2)
+
+RfGrid <-  expand.grid(mtry = seq(from = 4, to = 4.5, length.out = 5))
+
+hr.tree_2 = train(PerfScoreID ~ EngagementSurvey +
+                    EmpSatisfaction +
+                    Age +
+                    Salary +
+                    Absences +
+                    ManagerID, 
+                    data=train, 
+                    method="rf",
+                    metric = 'Accuracy',
+                    trControl = trainControl(method = "cv", number=10, repeats=3, search = 'grid'))
+
+hr.tree_2
+
+plot(hr.tree_2)
+tree_func <- function(final_model, 
+                      tree_num) {
+  
+  # get tree by index
+  tree <- randomForest::getTree(final_model, 
+                                k = tree_num, 
+                                labelVar = TRUE) %>%
+    tibble::rownames_to_column() %>%
+    # make leaf split points to NA, so the 0s won't get plotted
+    mutate(`split point` = ifelse(is.na(prediction), `split point`, NA))
+  
+  # prepare data frame for graph
+  graph_frame <- data.frame(from = rep(tree$rowname, 2),
+                            to = c(tree$`left daughter`, tree$`right daughter`))
+  
+  # convert to graph and delete the last node that we don't want to plot
+  graph <- graph_from_data_frame(graph_frame) %>%
+    delete_vertices("0")
+  
+  # set node labels
+  V(graph)$node_label <- gsub("_", " ", as.character(tree$`split var`))
+  V(graph)$leaf_label <- as.character(tree$prediction)
+  V(graph)$split <- as.character(round(tree$`split point`, digits = 2))
+  
+  # plot
+  plot <- ggraph(graph, 'dendrogram') + 
+    theme_bw() +
+    geom_edge_link() +
+    geom_node_point() +
+    geom_node_text(aes(label = node_label), na.rm = TRUE, repel = TRUE) +
+    geom_node_label(aes(label = split), vjust = 2.5, na.rm = TRUE, fill = "white") +
+    geom_node_label(aes(label = leaf_label, fill = leaf_label), na.rm = TRUE, 
+                    repel = TRUE, colour = "white", fontface = "bold", show.legend = FALSE) +
+    theme(panel.grid.minor = element_blank(),
+          panel.grid.major = element_blank(),
+          panel.background = element_blank(),
+          plot.background = element_rect(fill = "white"),
+          panel.border = element_blank(),
+          axis.line = element_blank(),
+          axis.text.x = element_blank(),
+          axis.text.y = element_blank(),
+          axis.ticks = element_blank(),
+          axis.title.x = element_blank(),
+          axis.title.y = element_blank(),
+          plot.title = element_text(size = 18))
+  
+  print(plot)
+}
+
+hr_tree_num<- which(hr.tree_2$finalModel$forest$ndbigtree == min(hr.tree_2$finalModel$forest$ndbigtree))
+tree_func(final_model = hr.tree_2$finalModel, hr_tree_num)
+
+
+
+hr.pred_2 = predict(hr.tree_2, newdata = validation)
+
+table(hr.pred_2, validation$PerfScoreID)
+
+error.rate2 = round(mean(hr.pred_2 != validation$PerfScoreID),2)
+
+error.rate2
