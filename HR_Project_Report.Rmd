@@ -22,6 +22,10 @@ library(lubridate)
 library(reshape2)
 library(plyr)
 library(RColorBrewer)
+library(corrplot)
+library(caret)
+library(igraph)
+library(ggraph)
 
 nb.cols <- 26
 mycolors <- colorRampPalette(brewer.pal(8, "Set2"))(nb.cols)
@@ -344,3 +348,162 @@ hr_data %>% group_by(RecruitmentSource) %>%
             theme_minimal()
 ````
 
+## 4.0 Correlation
+
+````{r Correlation, echo = FALSE, warning = FALSE, error = FALSE, message = FALSE}
+hr_data_numeric<- hr_data%>% dplyr::select(where(is.numeric))
+useless_col_numeric<- c("EmpID", "Zip", 'order')
+hr_data_numeric<- hr_data_numeric[, -which(colnames(hr_data_numeric) %in% useless_col_numeric)]
+
+corrplot(cor(hr_data_numeric), method = 'circle')
+
+````
+It is possible to appreciate an interesting correlation between the Performance Score (PerfScoreID in the graph) and other variables in the data set: Salary, Manager, Engagement, Employee satisfaction, Absences and Age. This can suggest that the employees performance can be subjected to variation according to those other variables. Lets explore this possible insight deeper.
+
+````{r Correlation2, echo = FALSE, warning = FALSE, error = FALSE, message = FALSE}
+with(hr_data, qplot(Salary, PerfScoreID, colour = EngagementSurvey, cex = EmpSatisfaction ))
+
+````
+In the plot is possible to appreciate a slightly pattern. It`s worth to try build a prediction model that takes as input Salary, Manager, Engagement, Employee satisfaction, Absences, Age and maybe other variables to predict how the employees performance will be.
+
+## 5.0 Prediction model
+
+````{r PredModel, echo = FALSE, warning = FALSE, error = FALSE, message = FALSE}
+hr_data$PerfScoreID<- as.factor(hr_data$PerfScoreID)
+
+val_index<- createDataPartition(hr_data$PerfScoreID, p = 0.2, list = FALSE)
+
+validation<- hr_data[val_index,]
+train<- hr_data[-val_index,]
+
+hr.tree = train(PerfScoreID ~ EngagementSurvey +
+                              EmpSatisfaction +
+                              Age +
+                              Salary +
+                              Absences +
+                              ManagerID, 
+                              data=train, 
+                              method="rpart", 
+                              trControl = trainControl(method = "cv"))
+hr.tree
+
+suppressMessages(library(rattle))
+
+fancyRpartPlot(hr.tree$finalModel)
+
+varImp(hr.tree)
+
+hr.pred = predict(hr.tree, newdata = validation)
+
+error.rate = round(mean(hr.pred != validation$PerfScoreID),2)
+````
+
+I start trying to fit a simple CART model, which generated the decision tree in the plot.
+It also estimated the importance of each variable in the model.
+Overall the model has an estimated accuracy of `r max(hr.tree$results$Accuracy)` and an error of `r error.rate`.
+
+Lets try to fit a more complex model to raise our accuracy.
+\pagebreak
+
+````{r PredModel2, echo = FALSE, warning = FALSE, error = FALSE, message = FALSE}
+hr.tree_2 = train(PerfScoreID ~ EngagementSurvey +
+                  EmpSatisfaction +
+                  Age +
+                  Salary +
+                  Absences +
+                  ManagerID +
+                  Absences, 
+                  data=train, 
+                  method="rf",
+                  metric = 'Accuracy',
+                  trControl = trainControl(method = "cv", number=10, repeats=3, search = 'random'))
+
+hr.tree_2
+
+plot(hr.tree_2)
+
+````
+Using a default model we can see that we have a result of `r max(hr.tree_2$results$Accuracy)`, witch is slightly better than the previous one.  
+
+Let`s see if the model can be tune to reach a better result.
+\pagebreak
+
+
+````{r PredModel2 part2, echo = FALSE, warning = FALSE, error = FALSE, message = FALSE}
+
+RfGrid <-  expand.grid(mtry = seq(from = 4, to = 4.5, length.out = 5))
+
+hr.tree_3 = train(PerfScoreID ~ EngagementSurvey +
+                    EmpSatisfaction +
+                    Age +
+                    Salary +
+                    Absences +
+                    ManagerID, 
+                    data=train, 
+                    method="rf",
+                    metric = 'Accuracy',
+                    trControl = trainControl(method = "cv", number=10, repeats=3, search = 'grid'))
+
+hr.tree_3
+
+plot(hr.tree_3)
+tree_func <- function(final_model, 
+                      tree_num) {
+  
+  # get tree by index
+  tree <- randomForest::getTree(final_model, 
+                                k = tree_num, 
+                                labelVar = TRUE) %>%
+    tibble::rownames_to_column() %>%
+    # make leaf split points to NA, so the 0s won't get plotted
+    mutate(`split point` = ifelse(is.na(prediction), `split point`, NA))
+  
+  # prepare data frame for graph
+  graph_frame <- data.frame(from = rep(tree$rowname, 2),
+                            to = c(tree$`left daughter`, tree$`right daughter`))
+  
+  # convert to graph and delete the last node that we don't want to plot
+  graph <- graph_from_data_frame(graph_frame) %>%
+    delete_vertices("0")
+  
+  # set node labels
+  V(graph)$node_label <- gsub("_", " ", as.character(tree$`split var`))
+  V(graph)$leaf_label <- as.character(tree$prediction)
+  V(graph)$split <- as.character(round(tree$`split point`, digits = 2))
+  
+  # plot
+  plot <- ggraph(graph, 'dendrogram') + 
+    theme_bw() +
+    geom_edge_link() +
+    geom_node_point() +
+    geom_node_text(aes(label = node_label), na.rm = TRUE, repel = TRUE) +
+    geom_node_label(aes(label = split), vjust = 2.5, na.rm = TRUE, fill = "white") +
+    geom_node_label(aes(label = leaf_label, fill = leaf_label), na.rm = TRUE, 
+                    repel = TRUE, colour = "white", fontface = "bold", show.legend = FALSE) +
+    theme(panel.grid.minor = element_blank(),
+          panel.grid.major = element_blank(),
+          panel.background = element_blank(),
+          plot.background = element_rect(fill = "white"),
+          panel.border = element_blank(),
+          axis.line = element_blank(),
+          axis.text.x = element_blank(),
+          axis.text.y = element_blank(),
+          axis.ticks = element_blank(),
+          axis.title.x = element_blank(),
+          axis.title.y = element_blank(),
+          plot.title = element_text(size = 18))
+  
+  print(plot)
+}
+
+hr_tree_num<- which(hr.tree_3$finalModel$forest$ndbigtree == min(hr.tree_3$finalModel$forest$ndbigtree))
+tree_func(final_model = hr.tree_3$finalModel, hr_tree_num)
+
+
+
+hr.pred_3 = predict(hr.tree_3, newdata = validation)
+
+error.rate2 = round(mean(hr.pred_3 != validation$PerfScoreID),2)
+
+````
+We further increase the accuracy at `r max(hr.tree_3$results$Accuracy)` with an error of `r error.rate2`.
